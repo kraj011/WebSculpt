@@ -5,13 +5,14 @@ mod camera;
 mod instance;
 mod model;
 mod resources;
+mod brush;
 
 use state::State;
 use winit::{
     event::*, event_loop::EventLoop, keyboard::{KeyCode, PhysicalKey}, window::WindowBuilder
 };
 
-use cgmath::prelude::*;
+use cgmath::{prelude::*, Point3};
 
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
@@ -46,6 +47,27 @@ pub async fn run() {
                     },
                     ..
                 } => control_flow.exit(),
+                WindowEvent::CursorMoved {
+                    position,
+                    ..
+                } => {
+                    state.brush.update_position(Point3::new(position.x as f32, position.y as f32, 0.0));
+                },
+                WindowEvent::MouseWheel { 
+                    delta,
+                    ..
+                } => {
+                    let mut is_positive = true;
+                    match delta {
+                        MouseScrollDelta::LineDelta(x, y) => is_positive = *y >= 0.0,
+                        MouseScrollDelta::PixelDelta(physical_position) => is_positive = physical_position.y >= 0.0,
+                    };
+                    if is_positive {
+                        state.brush.update_radius(state.brush.radius + 1.0);
+                    } else {
+                        state.brush.update_radius(state.brush.radius - 1.0);
+                    }
+                }
                 WindowEvent::Resized(physical_size) => {
                     state.resize(*physical_size);
                 },

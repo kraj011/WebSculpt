@@ -2,7 +2,7 @@ use cgmath::prelude::*;
 use wgpu::{include_wgsl, util::DeviceExt, BufferUsages, Instance, ShaderStages};
 use winit::{event::WindowEvent, window::Window};
 
-use crate::{camera::{Camera, CameraController, CameraUniform}, instance::{self, InstanceRaw}, model::{DrawModel, Model}, resources, texture, vertex::{ModelVertex, Vertex, INDICES, VERTICES}};
+use crate::{brush::{self, Brush}, camera::{Camera, CameraController, CameraUniform}, instance::{self, InstanceRaw}, model::{DrawModel, Model}, resources, texture, vertex::{ModelVertex, Vertex, INDICES, VERTICES}};
 
 pub struct State<'a> {
     pub surface: wgpu::Surface<'a>,
@@ -26,6 +26,8 @@ pub struct State<'a> {
     pub camera_uniform: CameraUniform,
     pub camera_buffer: wgpu::Buffer,
     pub camera_bind_group: wgpu::BindGroup,
+
+    pub brush: brush::Brush,
 
     pub window: &'a Window
 }
@@ -258,6 +260,8 @@ impl<'a> State<'a> {
             cache: None,
         });
 
+        let brush = Brush::new(&device, &config);
+
         Self {
             window,
             surface,
@@ -278,6 +282,8 @@ impl<'a> State<'a> {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+
+            brush,
 
             clear_color: wgpu::Color { r: 0.1, g: 0.2, b: 0.3, a: 1.0 },
             size
@@ -319,6 +325,8 @@ impl<'a> State<'a> {
        self.camera_controller.update_camera(&mut self.camera);
        self.camera_uniform.update_view_proj(&self.camera);
        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+
+       self.queue.write_buffer(&self.brush.buffer, 0, bytemuck::cast_slice(&[self.brush.uniform]));
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -327,6 +335,8 @@ impl<'a> State<'a> {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
+
+        
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -357,6 +367,27 @@ impl<'a> State<'a> {
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.draw_model_instanced(&self.obj_model, 0..self.instances.len() as u32, &self.camera_bind_group);
             
+        }
+        {
+            
+            let mut brush_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Brush Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None
+            });
+
+            brush_render_pass.set_pipeline(&self.brush.render_pipeline);
+            brush_render_pass.set_bind_group(0, &self.brush.bind_group, &[]);
+            brush_render_pass.draw(0..7, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

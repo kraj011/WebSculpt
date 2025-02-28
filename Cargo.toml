@@ -1,5 +1,5 @@
 [package]
-name = "gaussian_renderer"
+name = "web_sculpt"
 version = "0.1.0"
 edition = "2021"
 
